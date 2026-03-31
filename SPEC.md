@@ -24,16 +24,16 @@ multi-step approval workflows, and automated SAP S/4HANA master data creation.
 
 ### 1.2 Scope Items
 
-| Item | Description | Priority |
-|------|-------------|----------|
-| New Product Launch | Guided request initiation with AI recommendations | P0 |
-| Product Amendment | Update existing materials | P0 |
-| Mass Product Creation | Bulk creation via Excel upload and AI prompts | P1 |
-| AI Recommendation Engine | Reference materials, BOM & Recipe suggestions | P0 |
-| Two-Step Workflow | Manufacturing approval → Finance approval | P0 |
-| Dashboard | Analytics driven by SAP data — how new products perform | P1 |
-| SSO / SAML | Single Sign-On via SAP Identity Provider | P0 |
-| ZATCA Integration | Auto-create request for ZATCA compliance (details TBD) | P1 |
+| Item | Description |
+|------|-------------|
+| New Product Launch | Guided request initiation with AI recommendations |
+| Product Amendment | Update existing materials |
+| Mass Product Creation | Bulk creation via Excel upload and AI prompts |
+| AI Recommendation Engine | Reference materials, BOM & Recipe suggestions |
+| Two-Step Workflow | Manufacturing approval → Finance approval |
+| Dashboard | Analytics driven by SAP data — how new products perform |
+| SSO / SAML | Single Sign-On via SAP Identity Provider |
+| ZATCA Integration | Auto-create request for ZATCA compliance (details TBD) |
 
 ### 1.3 Data Storage Philosophy
 
