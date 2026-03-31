@@ -274,32 +274,78 @@ database for analytics and tracking purposes.
 
 ### 5.2 SAP Authentication Strategy
 
+The application needs to fulfill two concurrent authentication goals with a single user login:
+1. **Feature Access Control:** Identify the user and their roles (e.g., Requestor, Manufacturing, Finance) to restrict UI features and API endpoints within the custom Node.js backend.
+2. **SAP API Access:** Obtain valid credentials to call SAP S/4HANA OData APIs (Product, BOM, Recipe) on behalf of the user, so SAP can enforce its own plant-level and organizational authorizations.
+
+There are two potential SSO protocols available via the SAP Identity Authentication Service (IAS) to achieve this: **SAML 2.0** and **OpenID Connect (OIDC)**.
+
+#### Option A: SAML 2.0 (Legacy Approach)
+
 ```
 ┌──────────────┐      SAML 2.0       ┌──────────────────┐
-│   Browser    │ ◄──────────────────► │   SAP IdP        │
-│   (React)    │                      │  (SAML Provider) │
-└──────┬───────┘                      └──────────────────┘
-       │
-┌──────▼───────┐     OAuth2 SAML      ┌──────────────────┐
-│   Node.js    │    Bearer Grant      │   SAP S/4HANA    │
-│   Backend    │ ────────────────────►│   (OData APIs)   │
-│  (SAML SP)   │                      │                  │
-└──────────────┘                      └──────────────────┘
+│   Browser    │ ◄──────────────────►│   SAP IdP        │
+│   (React)    │                     │  (SAML Provider) │
+└──────┬───────┘                     └────────┬─────────┘
+       │                                      │
+┌──────▼───────┐     OAuth2 SAML     ┌────────▼─────────┐
+│   Node.js    │    Bearer Grant     │   SAP S/4HANA    │
+│   Backend    │ ───────────────────►│   (OData APIs)   │
+│  (SAML SP)   │                     │                  │
+└──────────────┘                     └──────────────────┘
 ```
 
 **Flow:**
+1. React app redirects to SAP IdP for login.
+2. SAP IdP returns an XML SAML assertion to Node.js.
+3. Node.js extracts `userId` and `roles` from the XML to build the local session.
+4. For SAP API calls, Node.js uses the **OAuth2 SAML Bearer Assertion** flow to exchange the SAML assertion for an SAP-scoped OAuth2 access token.
 
-1. User accesses the React app → redirected to SAP IdP
-2. SAP IdP authenticates user → returns SAML assertion to Node.js
-3. Node.js parses assertion → extracts `userId`, `roles[]`, `email`
-4. Node.js creates session with role-based permissions
-5. For SAP API calls: Node.js uses **OAuth2 SAML Bearer Assertion** flow to obtain an OAuth2 access token scoped to the authenticated user
-6. SAP S/4HANA enforces its own authorization model (plant access, org-level checks)
+*Pros:* Supported natively by older SAP systems.
+*Cons:* Heavy XML parsing; requires secondary token exchange step for API calls; lacks native refresh token support.
 
-> [!WARNING]
-> The OAuth2 SAML Bearer flow requires a trust relationship between the
-> Node.js backend and the SAP OAuth2 Authorization Server. This needs SAP
-> Basis team configuration.
+#### Option B: OpenID Connect (OIDC) (Recommended Approach)
+
+```
+┌──────────────┐ Authorization Code  ┌──────────────────┐
+│   Browser    │      + PKCE         │   SAP IAS        │
+│   (React)    │ ◄──────────────────►│  (OIDC Provider) │
+└──────┬───────┘                     └────────┬─────────┘
+       │                                      │
+┌──────▼───────┐                     ┌────────▼─────────┐
+│   Node.js    │     access_token    │   SAP S/4HANA    │
+│   Backend    │ ───────────────────►│   (OData APIs)   │
+│ (OIDC Client)│                     │                  │
+└──────────────┘                     └──────────────────┘
+```
+
+**Flow:**
+1. React app utilizes Authorization Code flow with SAP IAS.
+2. SAP IAS returns a JWT `id_token` (containing user profile and roles) and an OAuth2 `access_token`.
+3. Node.js validates the `id_token` to establish the local session and feature access.
+4. For SAP API calls, Node.js uses the `access_token` directly as a Bearer token (or performs an automated JWT Token Exchange if S/4HANA requires a differently scoped token).
+5. Node.js uses the `refresh_token` to silently renew sessions.
+
+*Pros:* Modern, lightweight JSON web tokens (JWT); `access_token` is inherently designed for API authorization; native session renewal.
+*Cons:* SAP IAS administrator must explicitly configure the `groups` attribute to be included in the token claims.
+
+> [!IMPORTANT]
+> **Recommendation:** The system should adopt **OpenID Connect (OIDC)**. It provides a cleaner architecture, avoids XML overhead, and perfectly aligns with the dual need for identity (`id_token`) and API authorization (`access_token`) in a single flow.
+
+#### 5.2.1 Identity Provider Configuration Requirements
+
+Regardless of the chosen protocol, the integration service requires persistent configuration.
+
+**Non-Sensitive Config (Stored in App DB):**
+- IdP Discovery URL / Metadata URL
+- Application Client ID / Entity ID
+- Redirect URIs / ACS URLs
+- Scopes (if OIDC: `openid profile email groups`)
+- SAP API Base URL
+
+**Sensitive Config (Stored in Azure Key Vault / AWS Secrets Manager):**
+- Application Client Secret (OIDC)
+- IdP and SP X.509 Certificates / Private Keys (SAML)
 
 ### 5.3 OData Integration Patterns
 
@@ -641,6 +687,7 @@ This ensures the dashboard always shows **current, authoritative data** from SAP
 | 3 | Dashboard fields — what sales KPIs and which SAP APIs to extract them? | Business | TBD |
 | 4 | Detailed field mapping — which Material Master fields does the form capture? | Business + SAP Team | TBD |
 | 5 | SAP OAuth2 trust setup — has this been configured with SAP Basis? | SAP Admin | TBD |
+| 5a| SSO Auth Mechanism — Will we use SAML 2.0 or OpenID Connect (OIDC) with SAP IAS for feature access and SAP API calls? | Tech Lead + SAP Admin | TBD |
 | 6 | SAML attribute name for user roles — what is the claim name in the assertion? | SAP IdP Admin | TBD |
 | 7 | Email service — which provider? (SendGrid, Azure Communication Services, AWS SES) | Tech Lead | TBD |
 | 8 | SAP instance connectivity — VPN, ExpressRoute, or private endpoint? | Infra | TBD |
