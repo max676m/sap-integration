@@ -32,7 +32,7 @@ multi-step approval workflows, and automated SAP S/4HANA master data creation.
 | AI Recommendation Engine | Reference materials, BOM & Recipe suggestions |
 | Two-Step Workflow | Manufacturing approval → Finance approval |
 | Dashboard | Analytics driven by SAP data — how new products perform |
-| SSO / SAML | Single Sign-On via SAP Identity Provider |
+| SSO | Single Sign-On using refresh and access tokens for SAP calls |
 | ZATCA Integration | Auto-create request for ZATCA compliance (details TBD) |
 
 ### 1.3 Data Storage Philosophy
@@ -54,7 +54,7 @@ multi-step approval workflows, and automated SAP S/4HANA master data creation.
 
 ## 2. User Roles & Permissions
 
-### 2.1 Roles (sourced from SAML assertion)
+### 2.1 Roles (sourced from role information in SSO response)
 
 | Role | Permissions |
 |------|-------------|
@@ -62,7 +62,7 @@ multi-step approval workflows, and automated SAP S/4HANA master data creation.
 | **Manufacturing** | Review requests, amend BOM/Recipe data, approve/reject manufacturing leg |
 | **Finance** | Review requests, update costs, approve/reject finance leg |
 
-### 2.2 SAML Role-Based Access Matrix
+### 2.2 Role-Based Access Matrix
 
 | Feature | Requestor | Manufacturing | Finance |
 |---------|-----------|---------------|---------|
@@ -77,9 +77,8 @@ multi-step approval workflows, and automated SAP S/4HANA master data creation.
 | Bulk upload | ✅ | ❌ | ❌ |
 
 > [!NOTE]
-> Roles are extracted from the SAML assertion's `AttributeStatement`. The
-> exact SAML attribute name for roles needs to be confirmed with the SAP
-> IDP administrator.
+> Roles are determined by looking at the role information available in the SSO response.
+> This role information dictates page and feature visibility (e.g., who approves each stage, who submits a form).
 
 ---
 
@@ -96,8 +95,8 @@ multi-step approval workflows, and automated SAP S/4HANA master data creation.
 ┌───────────────────────────▼──────────────────────────────────────┐
 │           Node.js Backend (Express/Fastify + Mastra)             │
 │                                                                  │
-│  • SAML 2.0 Service Provider (passport-saml)                     │
-│  • Session management (roles + SAP user context)                 │
+│  • SSO Authentication (Refresh & Access tokens)                  │
+│  • Session management (role information from SSO response)       │
 │  • REST API gateway for React                                    │
 │  • Approval workflow engine                                      │
 │  • SAP S/4HANA API integration (OData V2 + V4)                   │
@@ -122,7 +121,7 @@ multi-step approval workflows, and automated SAP S/4HANA master data creation.
 
 External Dependencies:
   • SAP S/4HANA (On-Premise) — OData APIs (single source of truth)
-  • SAP Identity Provider — SAML 2.0 SSO
+  • SAP Identity Provider — SSO
   • Cloud: AWS / Azure [TBD]
   • Database: Cosmos DB (Azure) / DynamoDB (AWS) — metadata only
 ```
@@ -138,7 +137,7 @@ External Dependencies:
 | **LLM** | [TBD] | Azure OpenAI / Ollama / other |
 | **Database** | Cosmos DB / DynamoDB [AWS/Azure TBD] | Metadata + SAP entry IDs only — no business data stored |
 | **SAP System** | S/4HANA (On-Premise) | Single source of truth for all product / BOM / recipe data |
-| **Auth** | SAML 2.0 SSO | Via SAP Identity Provider |
+| **Auth** | SSO Authentication | Using Refresh and Access Tokens via SAP Identity Provider |
 | **Cloud** | AWS / Azure [TBD] | Hosting for all non-SAP components |
 | **Containerization** | Docker + Docker Compose | Dev environment; K8s for prod [TBD] |
 
@@ -274,78 +273,25 @@ database for analytics and tracking purposes.
 
 ### 5.2 SAP Authentication Strategy
 
-The application needs to fulfill two concurrent authentication goals with a single user login:
-1. **Feature Access Control:** Identify the user and their roles (e.g., Requestor, Manufacturing, Finance) to restrict UI features and API endpoints within the custom Node.js backend.
-2. **SAP API Access:** Obtain valid credentials to call SAP S/4HANA OData APIs (Product, BOM, Recipe) on behalf of the user, so SAP can enforce its own plant-level and organizational authorizations.
+The authentication strategy relies on an **SSO-based authentication mechanism**.
 
-There are two potential SSO protocols available via the SAP Identity Authentication Service (IAS) to achieve this: **SAML 2.0** and **OpenID Connect (OIDC)**.
-
-#### Option A: SAML 2.0 (Legacy Approach)
-
-```
-┌──────────────┐      SAML 2.0       ┌──────────────────┐
-│   Browser    │ ◄──────────────────►│   SAP IdP        │
-│   (React)    │                     │  (SAML Provider) │
-└──────┬───────┘                     └────────┬─────────┘
-       │                                      │
-┌──────▼───────┐     OAuth2 SAML     ┌────────▼─────────┐
-│   Node.js    │    Bearer Grant     │   SAP S/4HANA    │
-│   Backend    │ ───────────────────►│   (OData APIs)   │
-│  (SAML SP)   │                     │                  │
-└──────────────┘                     └──────────────────┘
-```
-
-**Flow:**
-1. React app redirects to SAP IdP for login.
-2. SAP IdP returns an XML SAML assertion to Node.js.
-3. Node.js extracts `userId` and `roles` from the XML to build the local session.
-4. For SAP API calls, Node.js uses the **OAuth2 SAML Bearer Assertion** flow to exchange the SAML assertion for an SAP-scoped OAuth2 access token.
-
-*Pros:* Supported natively by older SAP systems.
-*Cons:* Heavy XML parsing; requires secondary token exchange step for API calls; lacks native refresh token support.
-
-#### Option B: OpenID Connect (OIDC) (Recommended Approach)
-
-```
-┌──────────────┐ Authorization Code  ┌──────────────────┐
-│   Browser    │      + PKCE         │   SAP IAS        │
-│   (React)    │ ◄──────────────────►│  (OIDC Provider) │
-└──────┬───────┘                     └────────┬─────────┘
-       │                                      │
-┌──────▼───────┐                     ┌────────▼─────────┐
-│   Node.js    │     access_token    │   SAP S/4HANA    │
-│   Backend    │ ───────────────────►│   (OData APIs)   │
-│ (OIDC Client)│                     │                  │
-└──────────────┘                     └──────────────────┘
-```
-
-**Flow:**
-1. React app utilizes Authorization Code flow with SAP IAS.
-2. SAP IAS returns a JWT `id_token` (containing user profile and roles) and an OAuth2 `access_token`.
-3. Node.js validates the `id_token` to establish the local session and feature access.
-4. For SAP API calls, Node.js uses the `access_token` directly as a Bearer token (or performs an automated JWT Token Exchange if S/4HANA requires a differently scoped token).
-5. Node.js uses the `refresh_token` to silently renew sessions.
-
-*Pros:* Modern, lightweight JSON web tokens (JWT); `access_token` is inherently designed for API authorization; native session renewal.
-*Cons:* SAP IAS administrator must explicitly configure the `groups` attribute to be included in the token claims.
-
-> [!IMPORTANT]
-> **Recommendation:** The system should adopt **OpenID Connect (OIDC)**. It provides a cleaner architecture, avoids XML overhead, and perfectly aligns with the dual need for identity (`id_token`) and API authorization (`access_token`) in a single flow.
+Upon successful login via the SSO Identity Provider, the system will receive:
+1. **Refresh Token and Access Token:** These tokens are used to authenticate all subsequent SAP API calls. This includes GET calls (e.g., retrieving reference materials, bills of material) as well as the final POST calls for creating master material data and completing the Zakat entry.
+2. **Role Information:** The role information is returned directly in the SSO response. This role data is used to control page and feature visibility within the application (e.g., determining who has permission to approve requests at each stage, who is authorized to submit forms, etc.).
 
 #### 5.2.1 Identity Provider Configuration Requirements
 
-Regardless of the chosen protocol, the integration service requires persistent configuration.
+The integration service requires persistent configuration to support this token-based SSO flow:
 
 **Non-Sensitive Config (Stored in App DB):**
 - IdP Discovery URL / Metadata URL
-- Application Client ID / Entity ID
-- Redirect URIs / ACS URLs
-- Scopes (if OIDC: `openid profile email groups`)
+- Application Client ID
+- Redirect URIs
+- Scopes
 - SAP API Base URL
 
 **Sensitive Config (Stored in Azure Key Vault / AWS Secrets Manager):**
-- Application Client Secret (OIDC)
-- IdP and SP X.509 Certificates / Private Keys (SAML)
+- Application Client Secret
 
 ### 5.3 OData Integration Patterns
 
@@ -465,7 +411,7 @@ is persisted in the database:
   "id":               "req-uuid",
   "status":           "Completed",
   "requestor": {
-    "userId":         "from SAML",
+    "userId":         "from SSO",
     "email":          "user@menabev.com"
   },
   "approvals": [
@@ -562,7 +508,7 @@ is persisted in the database:
 
 | Page | Route | Role Access | Description |
 |------|-------|-------------|-------------|
-| Login | `/login` | All | SAML SSO redirect |
+| Login | `/login` | All | SSO redirect |
 | Dashboard | `/` | All | Analytics page — loads on login, fetches data from SAP using stored IDs |
 | New Request | `/request/new` | Requestor | Product form with AI chatbot sidebar |
 | Request Detail | `/request/:id` | All (filtered) | View + approve / reject / amend |
@@ -599,8 +545,8 @@ is persisted in the database:
 | `GET` | `/api/dashboard/analytics` | All | Fetch analytics — uses stored SAP IDs to query SAP for display data |
 | `POST` | `/api/bulk/upload` | Requestor | Upload Excel for bulk creation |
 | `GET` | `/api/sap/products?q=...` | All | Search SAP products (live query) |
-| `GET` | `/auth/saml/login` | Public | Initiate SAML login |
-| `POST` | `/auth/saml/callback` | Public | SAML assertion consumer |
+| `GET` | `/auth/sso/login` | Public | Initiate SSO login |
+| `POST` | `/auth/sso/callback` | Public | SSO token consumer |
 | `GET` | `/auth/session` | All | Get current user + roles |
 | `POST` | `/auth/logout` | All | Logout + destroy session |
 
@@ -664,9 +610,9 @@ This ensures the dashboard always shows **current, authoritative data** from SAP
 
 | Concern | Approach |
 |---------|----------|
-| Authentication | SAML 2.0 SSO — no local passwords |
-| Authorization | Role-based from SAML attributes, enforced server-side |
-| SAP API auth | OAuth2 SAML Bearer Assertion (user-level) |
+| Authentication | SSO (Token-based) — no local passwords |
+| Authorization | Role-based from SSO response, enforced server-side |
+| SAP API auth | SSO Access Token |
 | Data in transit | HTTPS/TLS 1.2+ everywhere |
 | Data at rest | Minimal local data encrypted via cloud-managed keys |
 | Data minimization | No business data stored locally; SAP is single source of truth |
@@ -687,8 +633,8 @@ This ensures the dashboard always shows **current, authoritative data** from SAP
 | 3 | Dashboard fields — what sales KPIs and which SAP APIs to extract them? | Business | TBD |
 | 4 | Detailed field mapping — which Material Master fields does the form capture? | Business + SAP Team | TBD |
 | 5 | SAP OAuth2 trust setup — has this been configured with SAP Basis? | SAP Admin | TBD |
-| 5a| SSO Auth Mechanism — Will we use SAML 2.0 or OpenID Connect (OIDC) with SAP IAS for feature access and SAP API calls? | Tech Lead + SAP Admin | TBD |
-| 6 | SAML attribute name for user roles — what is the claim name in the assertion? | SAP IdP Admin | TBD |
+| 5a| SSO Auth Mechanism — Finalized to use SSO based authentication with Refresh & Access Tokens. | Tech Lead + SAP Admin | Done |
+| 6 | Role Information — Extracted from the SSO response to define feature visibility. | Tech Lead | Done |
 | 7 | Email service — which provider? (SendGrid, Azure Communication Services, AWS SES) | Tech Lead | TBD |
 | 8 | SAP instance connectivity — VPN, ExpressRoute, or private endpoint? | Infra | TBD |
 | 9 | SAP APIs for analytics — which endpoints provide sales/performance data for the dashboard? | Business + SAP Team | TBD |
@@ -721,7 +667,7 @@ This ensures the dashboard always shows **current, authoritative data** from SAP
 | WERKS | SAP Plant Code |
 | STLNR | SAP BOM Number |
 | OData | Open Data Protocol — REST-like API standard used by SAP |
-| SAML | Security Assertion Markup Language — SSO protocol |
+| SSO | Single Sign-On |
 | Cosmos DB | Azure's globally distributed NoSQL database |
 | Mastra | TypeScript AI agent orchestration framework |
 | SLM | Small Language Model |
