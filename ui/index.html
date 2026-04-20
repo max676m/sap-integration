@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MenaBev NPL — Test Chat</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0f1117;
+      --surface: #1a1d27;
+      --surface-2: #242836;
+      --border: #2e3345;
+      --text: #e4e6ef;
+      --text-muted: #8b8fa3;
+      --accent: #6c5ce7;
+      --accent-light: #a29bfe;
+      --success: #00cec9;
+      --warning: #fdcb6e;
+      --bot-bg: #1e2235;
+      --user-bg: #6c5ce7;
+      --radius: 12px;
+    }
+
+    body {
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Header */
+    .header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 16px 24px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .header .logo {
+      width: 36px; height: 36px;
+      background: linear-gradient(135deg, var(--accent), var(--accent-light));
+      border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 700; font-size: 16px; color: white;
+    }
+    .header h1 { font-size: 18px; font-weight: 600; }
+    .header .badge {
+      font-size: 11px; background: var(--accent); color: white;
+      padding: 2px 8px; border-radius: 20px; font-weight: 500;
+    }
+
+    /* Chat container */
+    .chat-container {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      max-width: 800px;
+      width: 100%;
+      margin: 0 auto;
+      padding: 0;
+    }
+
+    /* Messages area */
+    .messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .messages::-webkit-scrollbar { width: 6px; }
+    .messages::-webkit-scrollbar-track { background: transparent; }
+    .messages::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+    /* Message bubbles */
+    .message {
+      max-width: 85%;
+      padding: 12px 16px;
+      border-radius: var(--radius);
+      line-height: 1.5;
+      font-size: 14px;
+      animation: fadeIn 0.3s ease;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .message.bot {
+      align-self: flex-start;
+      background: var(--bot-bg);
+      border: 1px solid var(--border);
+      border-bottom-left-radius: 4px;
+    }
+    .message.user {
+      align-self: flex-end;
+      background: var(--user-bg);
+      color: white;
+      border-bottom-right-radius: 4px;
+    }
+
+    /* Option buttons */
+    .options {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-top: 12px;
+    }
+    .option-btn {
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 12px 16px;
+      color: var(--text);
+      cursor: pointer;
+      text-align: left;
+      transition: all 0.2s ease;
+      font-size: 14px;
+    }
+    .option-btn:hover {
+      border-color: var(--accent);
+      background: rgba(108, 92, 231, 0.1);
+      transform: translateX(4px);
+    }
+    .option-btn .option-label { font-weight: 600; }
+    .option-btn .option-desc { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+
+    /* Field status panel */
+    .field-status {
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 12px 16px;
+      margin-top: 8px;
+      font-size: 13px;
+    }
+    .field-status .status-header {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-bottom: 8px; font-weight: 600; font-size: 12px; text-transform: uppercase;
+      letter-spacing: 0.5px; color: var(--text-muted);
+    }
+    .field-status .percentage {
+      color: var(--success); font-weight: 700; font-size: 14px;
+    }
+    .field-row {
+      display: flex; justify-content: space-between; padding: 4px 0;
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+    }
+    .field-row:last-child { border-bottom: none; }
+    .field-key { color: var(--text-muted); }
+    .field-val { color: var(--success); font-weight: 500; }
+    .field-val.missing { color: var(--warning); font-style: italic; }
+
+    /* Input area */
+    .input-area {
+      padding: 16px 24px;
+      background: var(--surface);
+      border-top: 1px solid var(--border);
+    }
+    .input-row {
+      max-width: 800px;
+      margin: 0 auto;
+      display: flex;
+      gap: 8px;
+    }
+    .input-row input {
+      flex: 1;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 12px 16px;
+      color: var(--text);
+      font-size: 14px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    .input-row input:focus { border-color: var(--accent); }
+    .input-row input::placeholder { color: var(--text-muted); }
+    .input-row button {
+      background: var(--accent);
+      color: white;
+      border: none;
+      border-radius: var(--radius);
+      padding: 12px 24px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .input-row button:hover { background: var(--accent-light); }
+    .input-row button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    /* Loading indicator */
+    .typing-indicator {
+      display: flex; gap: 4px; padding: 12px 16px;
+      align-self: flex-start;
+    }
+    .typing-indicator span {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: var(--text-muted);
+      animation: bounce 1.4s infinite ease-in-out both;
+    }
+    .typing-indicator span:nth-child(1) { animation-delay: -0.32s; }
+    .typing-indicator span:nth-child(2) { animation-delay: -0.16s; }
+    @keyframes bounce {
+      0%, 80%, 100% { transform: scale(0); }
+      40% { transform: scale(1); }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Header -->
+  <div class="header">
+    <div class="logo">M</div>
+    <h1>MenaBev NPL Assistant</h1>
+    <span class="badge">Phase 1 — Test</span>
+  </div>
+
+  <!-- Chat -->
+  <div class="chat-container">
+    <div class="messages" id="messages"></div>
+  </div>
+
+  <!-- Input -->
+  <div class="input-area">
+    <div class="input-row">
+      <input type="text" id="userInput" placeholder="Describe your product..." disabled />
+      <button id="sendBtn" onclick="sendMessage()" disabled>Send</button>
+    </div>
+  </div>
+
+  <script>
+    // ============================
+    // State
+    // ============================
+    let sessionId = crypto.randomUUID();
+    let context = {
+      currentStage: 'OPTION_SELECT',
+      selectedOption: undefined,
+      extractedFields: {},
+      promptCount: 0,
+    };
+
+    const messagesEl = document.getElementById('messages');
+    const inputEl = document.getElementById('userInput');
+    const sendBtn = document.getElementById('sendBtn');
+
+    // ============================
+    // Init — fetch initial options
+    // ============================
+    async function init() {
+      try {
+        const res = await fetch('/api/chat/options');
+        const data = await res.json();
+        addBotMessage(data.message, data.options);
+      } catch (err) {
+        addBotMessage('Failed to connect to the backend. Is the server running?');
+      }
+    }
+
+    // ============================
+    // Send a message
+    // ============================
+    async function sendMessage() {
+      const text = inputEl.value.trim();
+      if (!text) return;
+
+      addUserMessage(text);
+      inputEl.value = '';
+      inputEl.disabled = true;
+      sendBtn.disabled = true;
+
+      showTyping();
+
+      try {
+        const res = await fetch('/api/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            sessionId,
+            message: text,
+            context,
+          }),
+        });
+        const data = await res.json();
+        hideTyping();
+        handleResponse(data);
+      } catch (err) {
+        hideTyping();
+        addBotMessage('Error communicating with the backend. Please try again.');
+        inputEl.disabled = false;
+        sendBtn.disabled = false;
+      }
+    }
+
+    // ============================
+    // Handle option button click
+    // ============================
+    async function selectOption(optionId, label) {
+      addUserMessage(label);
+
+      context.selectedOption = optionId;
+      context.currentStage = 'OPTION_SELECT';
+
+      showTyping();
+
+      try {
+        const res = await fetch('/api/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            sessionId,
+            message: label,
+            context,
+          }),
+        });
+        const data = await res.json();
+        hideTyping();
+        handleResponse(data);
+      } catch (err) {
+        hideTyping();
+        addBotMessage('Error communicating with the backend.');
+      }
+    }
+
+    // ============================
+    // Handle response from backend
+    // ============================
+    function handleResponse(data) {
+      switch (data.type) {
+        case 'OPTIONS':
+          addBotMessage(data.message, data.options);
+          break;
+
+        case 'TEXT':
+          addBotMessage(data.message);
+          // Transition to field gathering — enable input
+          context.currentStage = 'FIELD_GATHERING';
+          inputEl.disabled = false;
+          sendBtn.disabled = false;
+          inputEl.focus();
+          break;
+
+        case 'PROMPT_FIELDS':
+          addBotMessage(data.message);
+          if (data.extractedFields || data.missingFields) {
+            addFieldStatus(data.extractedFields, data.missingFields, data.completionPercentage);
+          }
+          // Update context for next round
+          context.currentStage = 'FIELD_GATHERING';
+          context.extractedFields = data.extractedFields || {};
+          context.promptCount = (context.promptCount || 0) + 1;
+          inputEl.disabled = false;
+          sendBtn.disabled = false;
+          inputEl.focus();
+          break;
+
+        case 'COMPLETE':
+          addBotMessage(data.message);
+          if (data.extractedFields && Object.keys(data.extractedFields).length > 0) {
+            addFieldStatus(data.extractedFields, data.missingFields, data.completionPercentage);
+          }
+          // Conversation complete — disable input
+          inputEl.disabled = true;
+          sendBtn.disabled = true;
+          inputEl.placeholder = 'Conversation complete — refresh to start again';
+          break;
+
+        default:
+          addBotMessage(data.message || 'Unexpected response.');
+      }
+    }
+
+    // ============================
+    // UI Helpers
+    // ============================
+    function addBotMessage(text, options) {
+      const div = document.createElement('div');
+      div.className = 'message bot';
+      div.innerHTML = formatMarkdown(text);
+
+      if (options && options.length > 0) {
+        const optionsDiv = document.createElement('div');
+        optionsDiv.className = 'options';
+        options.forEach(opt => {
+          const btn = document.createElement('button');
+          btn.className = 'option-btn';
+          btn.innerHTML = `<div class="option-label">${opt.label}</div><div class="option-desc">${opt.description}</div>`;
+          btn.onclick = () => {
+            // Disable all option buttons after selection
+            optionsDiv.querySelectorAll('.option-btn').forEach(b => { b.disabled = true; b.style.opacity = '0.5'; });
+            selectOption(opt.id, opt.label);
+          };
+          optionsDiv.appendChild(btn);
+        });
+        div.appendChild(optionsDiv);
+      }
+
+      messagesEl.appendChild(div);
+      scrollToBottom();
+    }
+
+    function addUserMessage(text) {
+      const div = document.createElement('div');
+      div.className = 'message user';
+      div.textContent = text;
+      messagesEl.appendChild(div);
+      scrollToBottom();
+    }
+
+    function addFieldStatus(fields, missing, percentage) {
+      const div = document.createElement('div');
+      div.className = 'message bot';
+
+      let html = '<div class="field-status">';
+      html += `<div class="status-header"><span>Extracted Fields</span><span class="percentage">${percentage ?? 0}%</span></div>`;
+
+      if (fields) {
+        for (const [key, val] of Object.entries(fields)) {
+          html += `<div class="field-row"><span class="field-key">${key}</span><span class="field-val">${val}</span></div>`;
+        }
+      }
+      if (missing && missing.length > 0) {
+        for (const key of missing) {
+          if (!fields || !(key in fields)) {
+            html += `<div class="field-row"><span class="field-key">${key}</span><span class="field-val missing">— missing —</span></div>`;
+          }
+        }
+      }
+
+      html += '</div>';
+      div.innerHTML = html;
+      messagesEl.appendChild(div);
+      scrollToBottom();
+    }
+
+    function showTyping() {
+      const div = document.createElement('div');
+      div.className = 'typing-indicator';
+      div.id = 'typing';
+      div.innerHTML = '<span></span><span></span><span></span>';
+      messagesEl.appendChild(div);
+      scrollToBottom();
+    }
+
+    function hideTyping() {
+      const el = document.getElementById('typing');
+      if (el) el.remove();
+    }
+
+    function formatMarkdown(text) {
+      // Very basic markdown: **bold**, \n→<br>
+      return text
+        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+        .replace(/\n/g, '<br>');
+    }
+
+    function scrollToBottom() {
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+    }
+
+    // Enter key to send
+    inputEl.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !inputEl.disabled) sendMessage();
+    });
+
+    // Start
+    init();
+  </script>
+</body>
+</html>
