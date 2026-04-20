@@ -219,7 +219,7 @@ database for analytics and tracking purposes.
 #### 5.1.1 Product (Material Master) — `OP_PRODUCT_0001`
 
 - **Protocol:** OData V4
-- **Purpose:** Create, Read, Update, Delete product (material) master data
+- **Purpose:** Create, Read, Update product (material) master data
 - **Key Entities:**
 
 | Entity | Description | Usage in NPL |
@@ -236,7 +236,7 @@ database for analytics and tracking purposes.
 #### 5.1.2 Bill of Material — `API_BILL_OF_MATERIAL_SRV_0002`
 
 - **Protocol:** OData V2
-- **Purpose:** Create, Read, Update, Delete BOM header and item data
+- **Purpose:** Create, Read, Update BOM header and item data
 - **Key Entities:**
 
 | Entity | Description | Usage in NPL |
@@ -254,7 +254,7 @@ database for analytics and tracking purposes.
 #### 5.1.3 Master Recipe — `API_MASTER_RECIPE_0001`
 
 - **Protocol:** OData V2
-- **Purpose:** Read, Create, Update, Delete master recipe data
+- **Purpose:** Read, Create, Update master recipe data
 - **Key Entities:**
 
 | Entity | Description | Usage in NPL |

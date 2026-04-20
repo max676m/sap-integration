@@ -1,5 +1,28 @@
-*
-!*/
-!.gitignore
-!SPEC.md
-!implementation_plan_UI.md
+# Dependencies
+node_modules/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Build output
+dist/
+build/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local-only files (not tracked in git)
+local/
